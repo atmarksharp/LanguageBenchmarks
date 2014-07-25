@@ -1,0 +1,254 @@
+#!/usr/bin/env ruby
+
+require "open3"
+
+RED = "\e[31m"
+GREEN = "\e[32m"
+CYAN = "\e[36m"
+RESET = "\e[m"
+
+class BenchCommand
+	def shell(s)
+		output, error, process = Open3.capture3(s)
+		if error.size > 0
+			@sh_error = ""
+			error.split("\n").each do |s|
+				next if s.include? "JAVA_OPTIONS"
+				@sh_error += RED + s + RESET + "\n"
+			end
+		end
+		output
+	end
+
+	def show_help()
+		puts
+		puts "usage: bench <mode> <target> <lang>"
+		puts
+		puts "<mode> = " + @modes.join(" | ")
+		puts 
+		puts "<target> = all | " + @targets.join(" | ")
+		puts
+		puts "<lang> = all | " + @langs.join(" | ")
+		puts
+	end
+
+	def print_shell_error()
+		if @sh_error.size > 0
+			STDERR.puts RED + "=== Error occuered while building ===" + RESET
+			puts @sh_error
+		end
+	end
+
+	def run_with(target,lang)
+		if @build_tasks.keys.include? lang
+			if !Dir.exists?("build/#{target}-#{lang}")
+				build_with(target,lang)
+			end
+		end
+
+		command = @commands[lang].gsub("%",target.to_s).gsub("$$","build/#{target}-#{lang}").split("|")
+		result = shell(command[0])
+		puts @langnames[lang] + "\t" + result
+
+		# print error
+		print_shell_error()
+
+		# remove chache etc...
+		if command.size > 1
+			shell(command[1])
+		end
+	end
+
+	def build_with(target,lang)
+		command = @build_tasks[lang].gsub("%",target.to_s).gsub("$$","build/#{target}-#{lang}")
+
+		STDERR.puts GREEN + "[BUILD] #{target} / #{lang} ..." + RESET
+		shell("mkdir -p build/#{target}-#{lang}/")
+		shell(command)
+	end
+
+	def clean_with(target,lang)
+		STDERR.puts CYAN + "[CLEAN] #{target} / #{lang} ..." + RESET
+		shell("rm -rf build/#{target}-#{lang}/")
+	end
+
+	def do_task(target, lang, target_all, lang_all, process_method_name)
+		lang_list = nil
+		target_list = nil
+
+		if target == :all
+			target_list = target_all
+		elsif target_all.include? target
+			target_list = [target]
+		else
+			return
+		end
+
+		if lang == :all
+			lang_list = lang_all
+		elsif lang_all.include? lang
+			lang_list = [lang]
+		else
+			return
+		end
+
+		process_method = self.method(process_method_name)
+
+		target_list.each{|target|
+			lang_list.each{|lang|
+				process_method.call(target,lang)
+			}
+		}
+
+		# print_shell_error()
+	end
+
+	def run(target,lang)
+		do_task(target,lang,@targets,@langs,"run_with")
+	end
+
+	def build(target,lang)
+		do_task(target,lang,@targets,@build_tasks.keys,"build_with")
+	end
+
+	def clean(target,lang)
+		do_task(target,lang,@targets,@build_tasks.keys,"clean_with")
+	end
+
+	def main()
+		if !@modes.include? @mode
+			show_help()
+			return
+		end
+
+		if @mode == :help
+			show_help()
+			return
+		end
+
+		if @mode == :build
+			build(@arg1,@arg2)
+			return
+		end
+
+		if @mode == :clean
+			clean(@arg1,@arg2)
+			return
+		end
+
+		if @mode == :run
+			run(@arg1,@arg2)
+			return
+		end
+	end
+
+	def rbenv(version)
+		"~/.rbenv/versions/" + @ruby_versions[version] + "/bin/ruby"
+	end
+
+	def pyenv(version)
+		"~/.pyenv/versions/" + @python_versions[version] + "/bin/python"
+	end
+
+	def pythonpath()
+		"export PYTHONPATH=`pwd`:$PYTHONPATH;"
+	end
+
+	def python_rm()
+		"rm -rf lib/__pycache__ rm lib/*.pyc"
+	end
+
+	def jvm(version,command)
+		"`/usr/libexec/java_home -v '" + @java_versions[version] + "'`/bin/" + command
+	end
+
+	def java(version)
+		jvm(version,"java")
+	end
+
+	def javac(version)
+		jvm(version,"javac")
+	end
+
+	def gvm(command)
+		"export GROOVY_HOME=~/.gvm/#{@groovy_version}/current; ~/.gvm/groovy/"+@groovy_version+"/bin/"+command
+	end
+
+	def scalaenv(command)
+		"~/.scalaenv/versions/scala-"+@scala_version+"/bin/"+command
+	end
+
+	def initialize()
+		@opts = ARGV.select{|s| s.start_with? '-'}.map{|s| s.split('-').join}
+		@args = ARGV.select{|s| !(s.start_with? '-')}
+
+		@sh_error = ""
+		@mode = @opts[0].to_s.to_sym
+		@arg1 = @args[0].to_s.to_sym
+		@arg2 = @args[1].to_s.to_sym
+
+		@ruby_versions = {
+			:ruby => "2.1.2",
+			:rubinius => "rbx-2.2.9",
+			:jruby => "jruby-1.7.9"
+		}
+
+		@python_versions = {
+			:python => "3.4.0",
+			:pypy => "pypy-2.3.1",
+			:jython => "jython-2.7-beta2"
+		}
+
+		@java_versions = {
+			:java6 => "1.6*",
+			:java7 => "1.7*"
+		}
+
+		@groovy_version = "2.3.4"
+		@scala_version = "2.11.0"
+
+		@commands = {
+			:c => "$$/%.out",
+			:ruby => "#{rbenv(:ruby)} %/%.rb",
+			:rubinius => "#{rbenv(:rubinius)} %/%.rb",
+			:jruby => "#{rbenv(:jruby)} %/%.rb",
+			:python => "#{pythonpath} #{pyenv(:python)} %/%.py | #{python_rm}",
+			:pypy => "#{pythonpath} #{pyenv(:pypy)} %/%.py | #{python_rm}",
+			:jython => "#{pythonpath} #{pyenv(:jython)} %/%.py | #{python_rm}",
+			:java => "#{java(:java7)} -cp $$ %",
+			:groovy => "#{gvm("groovy")} -cp lib %/%.groovy",
+			:groovys => "#{gvm("groovy")} -cp lib %/%_s.groovy",
+			:scala => "#{scalaenv("scala")} -cp $$ %",
+		}
+
+		@langnames = {
+			:c => "C (gcc -O3)",
+			:ruby => "Ruby",
+			:rubinius => "Rubinius",
+			:jruby => "JRuby",
+			:python => "Python",
+			:pypy => "PyPy",
+			:jython => "Jython",
+			:java => "Java",
+			:groovy => "Groovy(Dynamic)",
+			:groovys => "Groovy(Static)",
+			:scala => "Scala",
+		}
+
+		@build_tasks = {
+			:c => "gcc -O3 %/%.c -o $$/%.out",
+			:java => "#{javac(:java7)} -cp %:lib %/%.java -d $$",
+			:scala => "scalac lib/scalalib/Bench.scala -d $$; scalac -cp $$ %/%.scala -d $$",
+		}
+
+		@modes = [:run,:build,:clean,:help]
+		@targets = [:tarai]
+		@langs = @commands.keys
+
+		main()
+	end
+end
+
+bench = BenchCommand.new
+
+
