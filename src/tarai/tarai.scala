@@ -10,8 +10,8 @@ object tarai{
 	}
 
 	def main(args: Array[String]):Unit = {
-		Bench.bench_start()
+		Bench.benchStart()
 		val result:Int = tarai(12,6,0)
-		Bench.bench_end()
+		Bench.benchEnd()
 	}
 }

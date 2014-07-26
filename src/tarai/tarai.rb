@@ -1,4 +1,4 @@
-require_relative '../lib/bench.rb'
+require 'lib/bench'
 
 def tarai(x, y, z)
 	if x <= y

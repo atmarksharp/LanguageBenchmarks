@@ -12,5 +12,5 @@ void bench_end(){
 	t1 = clock();
 
 	double res = (t1 - t0) / (CLOCKS_PER_SEC / 1000.);
-	printf("%d",(int)round(res));
+	printf("%d\n",(int)round(res));
 }

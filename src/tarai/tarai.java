@@ -10,8 +10,8 @@ public class tarai{
 	}
 
 	public static void main(String[] args) {
-		Bench.bench_start();
+		Bench.benchStart();
 		int result = tarai(12,6,0);
-		Bench.bench_end();
+		Bench.benchEnd();
 	}
 }

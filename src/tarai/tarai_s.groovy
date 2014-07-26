@@ -1,6 +1,8 @@
-import groovylib.Bench;
+import groovylib.Bench_s;
+import groovy.transform.CompileStatic
 
-public class tarai{
+@CompileStatic
+public class tarai_s{
 	public static int _tarai(int x, int y, int z){
 		if(x <= y){
 			return y;
@@ -10,8 +12,8 @@ public class tarai{
 	}
 
 	public static void main(String[] args) {
-		Bench.bench_start();
+		Bench_s.benchStart();
 		int result = _tarai(12,6,0);
-		Bench.bench_end();
+		Bench_s.benchEnd();
 	}
 }

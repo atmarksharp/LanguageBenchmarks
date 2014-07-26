@@ -1,4 +1,4 @@
-#include "../lib/bench.c"
+#include "bench.hpp"
 
 int tarai(int x, int y, int z){
 	if(x <= y){

@@ -34,19 +34,43 @@ class BenchCommand
 
 	def print_shell_error()
 		if @sh_error.size > 0
-			STDERR.puts RED + "=== Error occuered while building ===" + RESET
+			STDERR.puts RED + "[ERROR]" + RESET
 			puts @sh_error
 		end
 	end
 
+	def source_path(target)
+		"src/#{target}"
+	end
+
+	def build_path(target,lang)
+		"build/#{target}-#{lang}"
+	end
+
+	def apply_wildcard(str,target,lang)
+		wildcards = {
+			"%" => target.to_s,
+			"<src>" => source_path(target),
+			"<bld>" => build_path(target,lang)
+		}
+
+		result = str
+
+		wildcards.keys.each do |key|
+			result.gsub!(key, wildcards[key])
+		end
+
+		result
+	end
+
 	def run_with(target,lang)
 		if @build_tasks.keys.include? lang
-			if !Dir.exists?("build/#{target}-#{lang}")
+			if !Dir.exists?(build_path(target,lang))
 				build_with(target,lang)
 			end
 		end
 
-		command = @commands[lang].gsub("%",target.to_s).gsub("$$","build/#{target}-#{lang}").split("|")
+		command = apply_wildcard(@commands[lang],target,lang).split("|")
 		result = shell(command[0])
 		puts @langnames[lang] + "\t" + result
 
@@ -60,16 +84,18 @@ class BenchCommand
 	end
 
 	def build_with(target,lang)
-		command = @build_tasks[lang].gsub("%",target.to_s).gsub("$$","build/#{target}-#{lang}")
+		command = apply_wildcard(@build_tasks[lang],target,lang)
 
 		STDERR.puts GREEN + "[BUILD] #{target} / #{lang} ..." + RESET
-		shell("mkdir -p build/#{target}-#{lang}/")
-		shell(command)
+		shell("rm -rf "+build_path(target,lang))
+		shell("mkdir -p "+build_path(target,lang))
+		shell(command)+build_path(target,lang)
+		print_shell_error()
 	end
 
 	def clean_with(target,lang)
 		STDERR.puts CYAN + "[CLEAN] #{target} / #{lang} ..." + RESET
-		shell("rm -rf build/#{target}-#{lang}/")
+		shell("rm -rf "+build_path(target,lang))
 	end
 
 	def do_task(target, lang, target_all, lang_all, process_method_name)
@@ -154,6 +180,10 @@ class BenchCommand
 		"export PYTHONPATH=`pwd`:$PYTHONPATH;"
 	end
 
+	def rubylib()
+		"export RUBYLIB=`pwd`:$RUBYLIB;"
+	end
+
 	def python_rm()
 		"rm -rf lib/__pycache__ rm lib/*.pyc"
 	end
@@ -176,6 +206,10 @@ class BenchCommand
 
 	def scalaenv(command)
 		"~/.scalaenv/versions/scala-"+@scala_version+"/bin/"+command
+	end
+
+	def gopath()
+		"export GOPATH=`pwd`/lib/golib:$GOPATH;"
 	end
 
 	def initialize()
@@ -206,23 +240,29 @@ class BenchCommand
 
 		@groovy_version = "2.3.4"
 		@scala_version = "2.11.0"
+		@go_compiler = "6g"
+		@go_linker = "6l"
 
 		@commands = {
-			:c => "$$/%.out",
-			:ruby => "#{rbenv(:ruby)} %/%.rb",
-			:rubinius => "#{rbenv(:rubinius)} %/%.rb",
-			:jruby => "#{rbenv(:jruby)} %/%.rb",
-			:python => "#{pythonpath} #{pyenv(:python)} %/%.py | #{python_rm}",
-			:pypy => "#{pythonpath} #{pyenv(:pypy)} %/%.py | #{python_rm}",
-			:jython => "#{pythonpath} #{pyenv(:jython)} %/%.py | #{python_rm}",
-			:java => "#{java(:java7)} -cp $$ %",
-			:groovy => "#{gvm("groovy")} -cp lib %/%.groovy",
-			:groovys => "#{gvm("groovy")} -cp lib %/%_s.groovy",
-			:scala => "#{scalaenv("scala")} -cp $$ %",
+			:c => "<bld>/%.out",
+			:cpp => "<bld>/%.out",
+			:ruby => "#{rubylib} #{rbenv(:ruby)} <src>/%.rb",
+			:rubinius => "#{rubylib} #{rbenv(:rubinius)} <src>/%.rb",
+			:jruby => "#{rubylib} #{rbenv(:jruby)} <src>/%.rb",
+			:python => "#{pythonpath} #{pyenv(:python)} <src>/%.py | #{python_rm}",
+			:pypy => "#{pythonpath} #{pyenv(:pypy)} <src>/%.py | #{python_rm}",
+			:jython => "#{pythonpath} #{pyenv(:jython)} <src>/%.py | #{python_rm}",
+			:java => "#{java(:java7)} -cp <bld> %",
+			:groovy => "#{gvm("groovy")} -cp lib <src>/%.groovy",
+			:groovys => "#{gvm("groovy")} -cp lib <src>/%_s.groovy",
+			:scala => "#{scalaenv("scala")} -cp <bld> %",
+			:go => "#{gopath} go run <src>/%.go",
+			:d => "<bld>/%.out",
 		}
 
 		@langnames = {
 			:c => "C (gcc -O3)",
+			:cpp => "C++ (g++ -O3)",
 			:ruby => "Ruby",
 			:rubinius => "Rubinius",
 			:jruby => "JRuby",
@@ -233,12 +273,16 @@ class BenchCommand
 			:groovy => "Groovy(Dynamic)",
 			:groovys => "Groovy(Static)",
 			:scala => "Scala",
+			:go => "Go",
+			:d => "D (dmd -O)",
 		}
 
 		@build_tasks = {
-			:c => "gcc -O3 %/%.c -o $$/%.out",
-			:java => "#{javac(:java7)} -cp %:lib %/%.java -d $$",
-			:scala => "scalac lib/scalalib/Bench.scala -d $$; scalac -cp $$ %/%.scala -d $$",
+			:c => "gcc -w -O3 -Ilib <src>/%.c -o <bld>/%.out",
+			:cpp => "g++ -w -Wall -O3 -Ilib <src>/%.cpp -o <bld>/%.out",
+			:java => "#{javac(:java7)} -cp <src>:lib <src>/%.java -d <bld>",
+			:scala => "#{scalaenv("scalac")} lib/scalalib/*.scala -d <bld>; #{scalaenv("scalac")} -cp <bld> <src>/%.scala -d <bld>",
+			:d => "dmd -O lib/Bench.d <src>/%.d -of<bld>/%.out",
 		}
 
 		@modes = [:run,:build,:clean,:help]

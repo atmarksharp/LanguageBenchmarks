@@ -1,8 +1,3 @@
-# import sys
-# import os
-# cur = os.path.realpath(os.path.dirname(__file__))
-# sys.path.append(cur + "/..")
-
 from lib.bench import Bench
 
 def tarai(x, y, z):
