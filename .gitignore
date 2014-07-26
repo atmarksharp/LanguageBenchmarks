@@ -3,3 +3,7 @@
 *.pyc
 *.out
 *.o
+*.cmx
+*.cmi
+*.cmo
+*.class

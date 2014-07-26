@@ -258,6 +258,7 @@ class BenchCommand
 			:scala => "#{scalaenv("scala")} -cp <bld> %",
 			:go => "#{gopath} go run <src>/%.go",
 			:d => "<bld>/%.out",
+			:ocaml => "<bld>/%.out",
 		}
 
 		@langnames = {
@@ -275,6 +276,7 @@ class BenchCommand
 			:scala => "Scala",
 			:go => "Go",
 			:d => "D (dmd -O)",
+			:ocaml => "Ocaml",
 		}
 
 		@build_tasks = {
@@ -283,6 +285,7 @@ class BenchCommand
 			:java => "#{javac(:java7)} -cp <src>:lib <src>/%.java -d <bld>",
 			:scala => "#{scalaenv("scalac")} lib/scalalib/*.scala -d <bld>; #{scalaenv("scalac")} -cp <bld> <src>/%.scala -d <bld>",
 			:d => "dmd -O lib/Bench.d <src>/%.d -of<bld>/%.out",
+			:ocaml => "cp <src>/%.ml <bld>; cp lib/bench.ml <bld>; cd <bld>; ocamlopt bench.ml %.ml -o %.out",
 		}
 
 		@modes = [:run,:build,:clean,:help]
